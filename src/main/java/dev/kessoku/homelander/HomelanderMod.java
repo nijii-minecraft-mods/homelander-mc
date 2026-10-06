@@ -51,6 +51,7 @@ public final class HomelanderMod implements ModInitializer {
         });
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> LaserController.clearAll());
         ServerTickEvents.END_SERVER_TICK.register(server -> {
+            LaserController.advanceClock();
             for (var player : server.getPlayerManager().getPlayerList()) {
                 ControllerItem.onServerTick(player);
                 FlightController.tick(player);

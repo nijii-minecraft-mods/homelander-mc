@@ -33,7 +33,7 @@ shutil.copyfile(production, OUTPUT / "homelander-powers.jar")
 shutil.copyfile(sources, OUTPUT / "homelander-powers-sources.jar")
 shutil.copyfile(ROOT / "README.md", OUTPUT / "README.md")
 
-assets = sorted(path for path in OUTPUT.iterdir() if path.is_file())
+assets = sorted(path for path in OUTPUT.iterdir() if path.is_file() and path.name != "SHA256SUMS.txt")
 checksums = "".join(
     f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}\n"
     for path in assets

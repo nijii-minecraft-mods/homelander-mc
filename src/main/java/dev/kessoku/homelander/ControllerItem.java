@@ -28,6 +28,7 @@ public final class ControllerItem extends Item implements PolymerItem {
     @Override
     public void appendTooltip(ItemStack stack, TooltipContext context, List<Text> tooltip, TooltipType type) {
         tooltip.add(Text.literal("ПКМ: лазеры. Shift + ПКМ: полёт."));
+        tooltip.add(Text.literal("Лазеры: 7 с работы, 20 с перезарядки."));
         tooltip.add(Text.literal("Shift во время парения: зависнуть."));
         tooltip.add(Text.literal("ЛКМ во время парения: ускорение."));
     }
@@ -43,8 +44,7 @@ public final class ControllerItem extends Item implements PolymerItem {
                 player.sendMessage(Text.literal(mode == FlightController.Mode.HOVER
                         ? "Полёт: зависание" : "Полёт: парение"), true);
             } else {
-                boolean enabled = LaserController.toggle(player);
-                player.sendMessage(Text.literal(enabled ? "Лазеры включены" : "Лазеры выключены"), true);
+                LaserController.toggle(player);
             }
         }
         return TypedActionResult.success(stack);

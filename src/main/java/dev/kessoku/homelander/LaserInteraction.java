@@ -4,7 +4,6 @@ import net.minecraft.block.AbstractFireBlock;
 import net.minecraft.block.Blocks;
 import net.minecraft.block.FireBlock;
 import net.minecraft.entity.LivingEntity;
-import net.minecraft.registry.tag.BlockTags;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.hit.BlockHitResult;
@@ -56,7 +55,7 @@ public final class LaserInteraction {
             state.heat.reset();
             if (now - state.lastDamage >= 10) {
                 // A player damage source preserves vanilla PvP/team protections.
-                hit.entity().damage(player.getDamageSources().playerAttack(player), 1.0f);
+                hit.entity().damage(player.getDamageSources().playerAttack(player), 40.0f);
                 state.lastDamage = now;
             }
             return;
@@ -71,7 +70,7 @@ public final class LaserInteraction {
             state.heat.reset();
             return;
         }
-        int threshold = material.isIn(BlockTags.LEAVES) ? 40 : material.isIn(BlockTags.LOGS_THAT_BURN) ? 60 : 50;
+        int threshold = 3; // 0.15 seconds of continuous aim.
         BlockPos firePos = block.getBlockPos().offset(block.getSide());
         var fire = AbstractFireBlock.getState(world, firePos);
         if (!world.getBlockState(firePos).isAir() || !fire.canPlaceAt(world, firePos)
@@ -79,7 +78,7 @@ public final class LaserInteraction {
             state.heat.reset();
             return;
         }
-        if (state.heat.tick(new HeatedFace(block.getBlockPos(), block.getSide()), threshold, now)) {
+        if (state.heat.tick(new HeatedFace(block.getBlockPos(), block.getSide()), threshold, now, 4)) {
             world.setBlockState(firePos, fire, 3);
         }
     }

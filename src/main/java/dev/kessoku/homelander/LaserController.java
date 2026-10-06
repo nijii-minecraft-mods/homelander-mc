@@ -9,9 +9,10 @@ import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.network.packet.s2c.play.EntityTrackerUpdateS2CPacket;
 import net.fabricmc.fabric.api.networking.v1.PlayerLookup;
-import net.minecraft.util.hit.HitResult;
+import net.minecraft.text.Text;
+import net.minecraft.network.packet.s2c.play.EntityPassengersSetS2CPacket;
 import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.RaycastContext;
+
 
 import java.util.HashMap;
 import java.util.Map;
@@ -20,7 +21,15 @@ import java.util.UUID;
 public final class LaserController {
     private static final double RANGE = 48;
     private static final Map<UUID, BeamPair> ACTIVE = new HashMap<>();
+    private static final Map<UUID, LaserBurst> BURSTS = new HashMap<>();
+    private static long clock;
     private LaserController() {}
+
+    public static void advanceClock() {
+        clock++;
+        if (clock % 20 == 0) BURSTS.entrySet().removeIf(entry ->
+                !ACTIVE.containsKey(entry.getKey()) && entry.getValue().cooldown(clock) == 0);
+    }
 
     // Vanilla display entities render on ordinary clients. This approximates a
     // beacon's solid core and coloured sheath; no client renderer/resource pack.
@@ -52,7 +61,12 @@ public final class LaserController {
         void update(Vec3d start, Vec3d end) {
             float axialAngle = (float) ((getWorld().getTime() * 0.02) % (Math.PI * 2));
             var frame = LaserGeometry.frame(start, end, width, axialAngle);
-            Vec3d relative = start.subtract(getPos());
+            // The client mounts this display on the player, so translation must be
+            // relative to the same vanilla riding attachment, never a stale world anchor.
+            var owner = getVehicle();
+            Vec3d anchor = owner == null ? getPos()
+                    : owner.getPassengerRidingPos(this).subtract(getVehicleAttachmentPos(owner));
+            Vec3d relative = start.subtract(anchor);
             var translation = new org.joml.Vector3f(frame.getTranslation())
                     .add((float) relative.x, (float) relative.y, (float) relative.z);
             this.frame = new net.minecraft.util.math.AffineTransformation(translation,
@@ -75,7 +89,8 @@ public final class LaserController {
     private static final class BeamPair {
         final ServerWorld world;
         final Beam[] beams = new Beam[4];
-        final Vec3d anchor;
+        final ServerPlayerEntity owner;
+        boolean mountSynced;
         final LaserInteraction.State interaction;
 
         BeamPair(ServerPlayerEntity player) {
@@ -84,45 +99,71 @@ public final class LaserController {
 
         BeamPair(ServerPlayerEntity player, LaserInteraction.State interaction) {
             this.world = player.getServerWorld();
-            this.anchor = player.getEyePos();
+            this.owner = player;
             this.interaction = interaction;
             for (int eye = 0; eye < 2; eye++) {
                 beams[eye * 2] = new Beam(world, Blocks.RED_STAINED_GLASS.getDefaultState(), 0.16f);
                 beams[eye * 2 + 1] = new Beam(world, Blocks.WHITE_CONCRETE.getDefaultState(), 0.035f);
-                beams[eye * 2].setPosition(anchor);
-                beams[eye * 2 + 1].setPosition(anchor);
+                beams[eye * 2].setPosition(player.getEyePos());
+                beams[eye * 2 + 1].setPosition(player.getEyePos());
             }
         }
 
         void spawn() {
-            for (Beam beam : beams) world.spawnEntity(beam);
+            for (Beam beam : beams) {
+                world.spawnEntity(beam);
+                if (!beam.startRiding(owner, true)) throw new IllegalStateException("Could not attach eye beam");
+                owner.updatePassengerPosition(beam);
+            }
+            // Mounting changes the attachment index; recompute all local frames.
+            update(owner, this);
+        }
+
+        void syncMount() {
+            var packet = new EntityPassengersSetS2CPacket(owner);
+            owner.networkHandler.sendPacket(packet);
+            for (var viewer : PlayerLookup.tracking(owner)) viewer.networkHandler.sendPacket(packet);
         }
 
         void remove() {
-            for (Beam beam : beams) beam.discard();
+            for (Beam beam : beams) {
+                beam.stopRiding();
+                beam.discard();
+            }
+            syncMount();
         }
     }
 
-    public static boolean toggle(ServerPlayerEntity player) {
+    public static void toggle(ServerPlayerEntity player) {
         if (ACTIVE.containsKey(player.getUuid())) {
             clear(player);
-            return false;
+            player.sendMessage(Text.literal("Лазеры выключены. Перезарядка: 20 с"), true);
+            return;
+        }
+        LaserBurst burst = BURSTS.computeIfAbsent(player.getUuid(), id -> new LaserBurst());
+        if (!burst.start(clock)) {
+            player.sendMessage(Text.literal("Лазеры перезаряжаются: " + ((burst.cooldown(clock) + 19) / 20) + " с"), true);
+            return;
         }
         BeamPair pair = new BeamPair(player);
         update(player, pair);
         pair.spawn();
         ACTIVE.put(player.getUuid(), pair);
-        return true;
+        player.sendMessage(Text.literal("Лазеры включены: 7 с"), true);
     }
 
     public static void clear(ServerPlayerEntity player) {
         BeamPair pair = ACTIVE.remove(player.getUuid());
         if (pair != null) pair.remove();
+        LaserBurst burst = BURSTS.get(player.getUuid());
+        if (burst != null) burst.stop(clock);
     }
 
     public static void clearAll() {
         for (BeamPair pair : ACTIVE.values()) pair.remove();
         ACTIVE.clear();
+        BURSTS.clear();
+        clock = 0;
     }
 
     private static void update(ServerPlayerEntity player, BeamPair pair) {
@@ -133,7 +174,7 @@ public final class LaserController {
         Vec3d right = new Vec3d(Math.cos(yaw), 0, Math.sin(yaw));
         Vec3d eye = player.getEyePos();
         for (int index = 0; index < 2; index++) {
-            Vec3d start = eye.add(right.multiply(index == 0 ? -0.13 : 0.13)).add(forward.multiply(0.25));
+            Vec3d start = eye.add(right.multiply(index == 0 ? -0.13 : 0.13)).add(forward.multiply(0.03));
             Vec3d target = start.add(forward.multiply(RANGE));
             Vec3d end = LaserInteraction.trace(player, start, target).end();
             pair.beams[index * 2].update(start, end);
@@ -149,15 +190,15 @@ public final class LaserController {
             clear(player);
             return;
         }
-        if (pair.beams[0].isRemoved() || player.getEyePos().squaredDistanceTo(pair.anchor) > 64) {
-            // Re-anchor by spawning a new pair, not by teleporting tracked entities:
-            // mixing manual teleports with relative tracking packets doubles motion.
-            var interaction = pair.interaction;
+        if (java.util.Arrays.stream(pair.beams).anyMatch(beam -> beam.isRemoved() || beam.getVehicle() != player)) {
+            // Unexpected dismount must terminate the burst rather than bypass its timer.
             clear(player);
-            pair = new BeamPair(player, interaction);
-            update(player, pair);
-            pair.spawn();
-            ACTIVE.put(player.getUuid(), pair);
+            return;
+        }
+        LaserBurst burst = BURSTS.get(player.getUuid());
+        if (burst == null || burst.expire(clock)) {
+            clear(player);
+            player.sendMessage(Text.literal("Лазеры остывают: 20 с"), true);
             return;
         }
         update(player, pair);
@@ -168,7 +209,17 @@ public final class LaserController {
         onViewChanged(player);
         BeamPair pair = ACTIVE.get(player.getUuid());
         if (pair == null) return;
-        Vec3d start = player.getEyePos().add(player.getRotationVec(1).multiply(0.25));
+        // END_SERVER_TICK follows normal entity tracking. The owner also needs
+        // the mount packet, and it must arrive after all four display spawn packets.
+        if (!pair.mountSynced) {
+            pair.syncMount();
+            pair.mountSynced = true;
+        }
+        if (clock % 20 == 0) {
+            var burst = BURSTS.get(player.getUuid());
+            player.sendMessage(Text.literal("Лазеры: " + ((burst.remaining(clock) + 19) / 20) + " с"), true);
+        }
+        Vec3d start = player.getEyePos().add(player.getRotationVec(1).multiply(0.03));
         var hit = LaserInteraction.trace(player, start, start.add(player.getRotationVec(1).multiply(RANGE)));
         LaserInteraction.tick(player, pair.interaction, hit);
     }
