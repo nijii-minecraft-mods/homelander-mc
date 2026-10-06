@@ -14,6 +14,7 @@ repositories {
 }
 
 loom {
+    accessWidenerPath = file('src/main/resources/homelander.accesswidener')
     splitEnvironmentSourceSets()
     mods { "homelander" { sourceSet sourceSets.main } }
 }
@@ -40,6 +41,15 @@ tasks.register('stageSmokeTestMods', Sync) {
     into layout.projectDirectory.dir('server/mods')
     include '*.jar'
 }
+
+tasks.register('verifyBeamGeometry', JavaExec) {
+    dependsOn tasks.named('testClasses')
+    classpath = sourceSets.main.runtimeClasspath + sourceSets.test.output
+    mainClass = 'dev.kessoku.homelander.BeamGeometryCheck'
+}
+sourceSets.test.compileClasspath += sourceSets.main.compileClasspath
+tasks.named('test') { exclude '**/BeamGeometryCheck.class' }
+tasks.named('check') { dependsOn tasks.named('verifyBeamGeometry') }
 
 processResources {
     inputs.property "version", project.version

@@ -7,6 +7,7 @@
   "authors": ["Kessoku Band"],
   "license": "MIT",
   "environment": "*",
+  "accessWidener": "homelander.accesswidener",
   "entrypoints": { "main": ["dev.kessoku.homelander.HomelanderMod"] },
   "depends": {
     "fabricloader": ">=0.16.0",

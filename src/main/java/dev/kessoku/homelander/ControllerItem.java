@@ -4,6 +4,7 @@ import eu.pb4.polymer.core.api.item.PolymerItem;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
+import net.minecraft.item.tooltip.TooltipType;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
 import net.minecraft.util.Hand;
@@ -11,12 +12,24 @@ import net.minecraft.util.TypedActionResult;
 import net.minecraft.world.World;
 
 import java.util.Set;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class ControllerItem extends Item implements PolymerItem {
     private static final Set<UUID> PENDING_GIVE = ConcurrentHashMap.newKeySet();
     public ControllerItem(Settings settings) { super(settings); }
+
+    @Override
+    public Text getName(ItemStack stack) {
+        return Text.literal("Контроль способностей");
+    }
+
+    @Override
+    public void appendTooltip(ItemStack stack, TooltipContext context, List<Text> tooltip, TooltipType type) {
+        tooltip.add(Text.literal("ПКМ: лазеры. Shift + ПКМ: полёт."));
+        tooltip.add(Text.literal("Shift во время парения: зависнуть."));
+    }
 
     @Override
     public TypedActionResult<ItemStack> use(World world, net.minecraft.entity.player.PlayerEntity user, Hand hand) {
@@ -67,6 +80,6 @@ public final class ControllerItem extends Item implements PolymerItem {
 
     @Override
     public Item getPolymerItem(ItemStack itemStack, ServerPlayerEntity player) {
-        return Items.SPYGLASS;
+        return Items.NETHER_STAR;
     }
 }
