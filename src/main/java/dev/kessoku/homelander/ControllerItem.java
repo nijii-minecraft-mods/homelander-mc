@@ -29,6 +29,7 @@ public final class ControllerItem extends Item implements PolymerItem {
     public void appendTooltip(ItemStack stack, TooltipContext context, List<Text> tooltip, TooltipType type) {
         tooltip.add(Text.literal("ПКМ: лазеры. Shift + ПКМ: полёт."));
         tooltip.add(Text.literal("Shift во время парения: зависнуть."));
+        tooltip.add(Text.literal("ЛКМ во время парения: ускорение."));
     }
 
     @Override

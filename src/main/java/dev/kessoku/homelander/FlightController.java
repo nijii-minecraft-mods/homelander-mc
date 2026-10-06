@@ -3,13 +3,20 @@ package dev.kessoku.homelander;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.network.packet.s2c.play.EntityVelocityUpdateS2CPacket;
+import net.minecraft.network.packet.s2c.play.ExplosionS2CPacket;
+import net.minecraft.particle.ParticleTypes;
+import net.minecraft.registry.entry.RegistryEntry;
+import net.minecraft.sound.SoundEvents;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
+import net.minecraft.util.Hand;
 import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.explosion.Explosion;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.List;
 
 public final class FlightController {
     public enum Mode { HOVER, GLIDE }
@@ -25,12 +32,16 @@ public final class FlightController {
         int glideTicks;
         int slowTicks;
         Vec3d lastPosition;
+        Vec3d lastMotionPosition;
+        Vec3d motion = Vec3d.ZERO;
+        long lastBoost = -1000;
 
         State(ServerPlayerEntity player) {
             originalAllowFlying = !player.isCreative() && !player.isSpectator()
                     && player.getAbilities().allowFlying;
             originalFlying = originalAllowFlying && player.getAbilities().flying;
             lastPosition = player.getPos();
+            lastMotionPosition = player.getPos();
         }
     }
 
@@ -65,6 +76,8 @@ public final class FlightController {
             state.glideTicks = 0;
             state.slowTicks = 0;
             state.lastPosition = player.getPos();
+            state.lastMotionPosition = player.getPos();
+            state.motion = Vec3d.ZERO;
             if (!player.isCreative() && !player.isSpectator()) {
                 player.getAbilities().flying = false;
                 player.getAbilities().allowFlying = false;
@@ -88,6 +101,8 @@ public final class FlightController {
         // Entering from a stationary hover needs an initial forward impulse. After
         // this, vanilla client-side elytra physics controls motion, lift and steering.
         player.setVelocity(player.getRotationVec(1.0f).multiply(0.9));
+        state.motion = player.getVelocity();
+        state.lastMotionPosition = player.getPos();
         player.networkHandler.sendPacket(new EntityVelocityUpdateS2CPacket(player));
         player.fallDistance = 0;
     }
@@ -129,6 +144,42 @@ public final class FlightController {
 
     public static void forget(ServerPlayerEntity player) {
         STATES.remove(player.getUuid());
+    }
+
+    public static void observeMovement(ServerPlayerEntity player) {
+        State state = STATES.get(player.getUuid());
+        if (state == null || state.mode != Mode.GLIDE || !player.isFallFlying()) return;
+        Vec3d next = player.getPos();
+        Vec3d movement = next.subtract(state.lastMotionPosition);
+        state.lastMotionPosition = next;
+        if (Double.isFinite(movement.lengthSquared()) && movement.lengthSquared() > 1.0e-8) {
+            state.motion = movement;
+            // Keep vanilla's movement validation in step with client-side flight.
+            player.setVelocity(movement);
+        }
+    }
+
+    public static boolean boostFromController(ServerPlayerEntity player, Hand hand) {
+        State state = STATES.get(player.getUuid());
+        if (hand != Hand.MAIN_HAND || state == null || state.mode != Mode.GLIDE
+                || !player.isFallFlying() || !player.hasStatusEffect(HomelanderMod.COMPOUND_V)
+                || !player.getMainHandStack().isOf(HomelanderMod.CONTROLLER)) return false;
+        long now = player.getServerWorld().getTime();
+        if (now - state.lastBoost < 4) return true; // Deduplicate attack + swing packets.
+        state.lastBoost = now;
+        Vec3d impulse = player.getRotationVec(1).multiply(0.35 + state.motion.length() * 0.15);
+        state.motion = state.motion.add(impulse);
+        player.setVelocity(state.motion);
+        // Vanilla velocity updates clamp each component to 3.9. Explosion knockback
+        // is an additive float vector, with no such clamp. This packet has zero
+        // power, no affected blocks, no damage and a silent sound; no explosion is
+        // created on the server. A small cloud is just the boost's visual cue.
+        player.networkHandler.sendPacket(new ExplosionS2CPacket(
+                player.getX(), player.getY(), player.getZ(), 0, List.of(), impulse,
+                Explosion.DestructionType.KEEP, ParticleTypes.CLOUD, ParticleTypes.CLOUD,
+                RegistryEntry.of(SoundEvents.INTENTIONALLY_EMPTY)));
+        player.sendMessage(Text.literal("Разгон: %.1f блоков/с".formatted(state.motion.length() * 20)), true);
+        return true;
     }
 
     public static void tick(ServerPlayerEntity player) {

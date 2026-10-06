@@ -1,6 +1,10 @@
 package dev.kessoku.homelander;
 
 import eu.pb4.polymer.core.api.item.PolymerItem;
+import eu.pb4.polymer.resourcepack.api.PolymerResourcePackUtils;
+import eu.pb4.polymer.resourcepack.api.PolymerModelData;
+import net.minecraft.text.Text;
+import net.minecraft.util.Identifier;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.Item;
@@ -13,6 +17,11 @@ import net.minecraft.util.TypedActionResult;
 import net.minecraft.world.World;
 
 public final class SerumItem extends Item implements PolymerItem {
+    private final PolymerModelData model = PolymerResourcePackUtils.requestModel(Items.POTION, Identifier.of("homelander", "item/serum"));
+
+    @Override public Text getName(ItemStack stack) { return Text.literal("Сыворотка Хоумлендера"); }
+    @Override public int getPolymerCustomModelData(ItemStack stack, ServerPlayerEntity player) { return model.value(); }
+
     public SerumItem(Settings settings) { super(settings); }
 
     @Override public UseAction getUseAction(ItemStack stack) { return UseAction.DRINK; }

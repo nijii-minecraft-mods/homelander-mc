@@ -1,0 +1,8 @@
+{
+  "required": true,
+  "package": "dev.kessoku.homelander.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "refmap": "homelander.refmap.json",
+  "mixins": ["PowerInputMixin"],
+  "injectors": {"defaultRequire": 1}
+}

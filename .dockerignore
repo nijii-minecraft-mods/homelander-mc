@@ -10,3 +10,6 @@ gradle
 README.md
 *.zip
 .env
+
+.tools
+assets-source

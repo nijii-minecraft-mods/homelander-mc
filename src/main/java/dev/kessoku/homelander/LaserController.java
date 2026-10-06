@@ -7,6 +7,8 @@ import net.minecraft.entity.decoration.Brightness;
 import net.minecraft.entity.decoration.DisplayEntity;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
+import net.minecraft.network.packet.s2c.play.EntityTrackerUpdateS2CPacket;
+import net.fabricmc.fabric.api.networking.v1.PlayerLookup;
 import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.RaycastContext;
@@ -24,6 +26,8 @@ public final class LaserController {
     // beacon's solid core and coloured sheath; no client renderer/resource pack.
     private static final class Beam extends DisplayEntity.BlockDisplayEntity {
         final float width;
+        net.minecraft.util.math.AffineTransformation frame;
+        net.minecraft.util.math.AffineTransformation sentFrame;
 
         Beam(ServerWorld world, BlockState block, float width) {
             super(EntityType.BLOCK_DISPLAY, world);
@@ -46,20 +50,47 @@ public final class LaserController {
         public boolean shouldSave() { return false; }
 
         void update(Vec3d start, Vec3d end) {
-            setTransformation(LaserGeometry.frame(start, end, width));
-            setPosition(start.x, start.y, start.z);
+            float axialAngle = (float) ((getWorld().getTime() * 0.02) % (Math.PI * 2));
+            var frame = LaserGeometry.frame(start, end, width, axialAngle);
+            Vec3d relative = start.subtract(getPos());
+            var translation = new org.joml.Vector3f(frame.getTranslation())
+                    .add((float) relative.x, (float) relative.y, (float) relative.z);
+            this.frame = new net.minecraft.util.math.AffineTransformation(translation,
+                    frame.getLeftRotation(), frame.getScale(), frame.getRightRotation());
+            setTransformation(this.frame);
+        }
+
+        void sendNow() {
+            if (frame == null || frame.equals(sentFrame)) return;
+            var entries = getDataTracker().getChangedEntries();
+            if (entries == null || entries.isEmpty()) return;
+            var packet = new EntityTrackerUpdateS2CPacket(getId(), entries);
+            // Do not consume dirty entries: normal tracking still initializes
+            // newly arriving observers and sends the same current frame.
+            for (var viewer : PlayerLookup.tracking(this)) viewer.networkHandler.sendPacket(packet);
+            sentFrame = frame;
         }
     }
 
     private static final class BeamPair {
         final ServerWorld world;
         final Beam[] beams = new Beam[4];
+        final Vec3d anchor;
+        final LaserInteraction.State interaction;
 
-        BeamPair(ServerWorld world) {
-            this.world = world;
+        BeamPair(ServerPlayerEntity player) {
+            this(player, new LaserInteraction.State());
+        }
+
+        BeamPair(ServerPlayerEntity player, LaserInteraction.State interaction) {
+            this.world = player.getServerWorld();
+            this.anchor = player.getEyePos();
+            this.interaction = interaction;
             for (int eye = 0; eye < 2; eye++) {
                 beams[eye * 2] = new Beam(world, Blocks.RED_STAINED_GLASS.getDefaultState(), 0.16f);
                 beams[eye * 2 + 1] = new Beam(world, Blocks.WHITE_CONCRETE.getDefaultState(), 0.035f);
+                beams[eye * 2].setPosition(anchor);
+                beams[eye * 2 + 1].setPosition(anchor);
             }
         }
 
@@ -77,7 +108,7 @@ public final class LaserController {
             clear(player);
             return false;
         }
-        BeamPair pair = new BeamPair(player.getServerWorld());
+        BeamPair pair = new BeamPair(player);
         update(player, pair);
         pair.spawn();
         ACTIVE.put(player.getUuid(), pair);
@@ -104,15 +135,13 @@ public final class LaserController {
         for (int index = 0; index < 2; index++) {
             Vec3d start = eye.add(right.multiply(index == 0 ? -0.13 : 0.13)).add(forward.multiply(0.25));
             Vec3d target = start.add(forward.multiply(RANGE));
-            var hit = pair.world.raycast(new RaycastContext(start, target,
-                    RaycastContext.ShapeType.COLLIDER, RaycastContext.FluidHandling.NONE, player));
-            Vec3d end = hit.getType() == HitResult.Type.MISS ? target : hit.getPos();
+            Vec3d end = LaserInteraction.trace(player, start, target).end();
             pair.beams[index * 2].update(start, end);
             pair.beams[index * 2 + 1].update(start, end);
         }
     }
 
-    public static void tick(ServerPlayerEntity player) {
+    public static void onViewChanged(ServerPlayerEntity player) {
         BeamPair pair = ACTIVE.get(player.getUuid());
         if (pair == null) return;
         if (!player.isAlive() || !player.hasStatusEffect(HomelanderMod.COMPOUND_V)
@@ -120,14 +149,27 @@ public final class LaserController {
             clear(player);
             return;
         }
-        if (pair.beams[0].isRemoved()) {
+        if (pair.beams[0].isRemoved() || player.getEyePos().squaredDistanceTo(pair.anchor) > 64) {
+            // Re-anchor by spawning a new pair, not by teleporting tracked entities:
+            // mixing manual teleports with relative tracking packets doubles motion.
+            var interaction = pair.interaction;
             clear(player);
-            pair = new BeamPair(player.getServerWorld());
+            pair = new BeamPair(player, interaction);
             update(player, pair);
             pair.spawn();
             ACTIVE.put(player.getUuid(), pair);
             return;
         }
         update(player, pair);
+        for (var beam : pair.beams) beam.sendNow();
+    }
+
+    public static void tick(ServerPlayerEntity player) {
+        onViewChanged(player);
+        BeamPair pair = ACTIVE.get(player.getUuid());
+        if (pair == null) return;
+        Vec3d start = player.getEyePos().add(player.getRotationVec(1).multiply(0.25));
+        var hit = LaserInteraction.trace(player, start, start.add(player.getRotationVec(1).multiply(RANGE)));
+        LaserInteraction.tick(player, pair.interaction, hit);
     }
 }

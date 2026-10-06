@@ -3,17 +3,28 @@
   "id": "homelander",
   "version": "${version}",
   "name": "Homelander Powers",
-  "description": "Сыворотка: полёт, усиленное здоровье и визуальные лазеры.",
-  "authors": ["Kessoku Band"],
+  "description": "Сыворотка: два режима полёта, усиленное здоровье и лазеры из глаз.",
+  "authors": [
+    "Kessoku Band"
+  ],
   "license": "MIT",
   "environment": "*",
   "accessWidener": "homelander.accesswidener",
-  "entrypoints": { "main": ["dev.kessoku.homelander.HomelanderMod"] },
+  "mixins": [
+    "homelander.mixins.json"
+  ],
+  "entrypoints": {
+    "main": [
+      "dev.kessoku.homelander.HomelanderMod"
+    ]
+  },
   "depends": {
     "fabricloader": ">=0.16.0",
     "minecraft": "1.21.1",
     "java": ">=21",
     "fabric-api": "*",
-    "polymer-core": "*"
+    "polymer-core": "*",
+    "polymer-resource-pack": "*",
+    "polymer-autohost": "*"
   }
 }

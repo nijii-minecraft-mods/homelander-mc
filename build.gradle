@@ -14,6 +14,7 @@ repositories {
 }
 
 loom {
+    mixin { defaultRefmapName = 'homelander.refmap.json' }
     accessWidenerPath = file('src/main/resources/homelander.accesswidener')
     splitEnvironmentSourceSets()
     mods { "homelander" { sourceSet sourceSets.main } }
@@ -29,11 +30,15 @@ dependencies {
     modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
     modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
     modImplementation "eu.pb4:polymer-core:${project.polymer_version}"
+    modImplementation "eu.pb4:polymer-resource-pack:${project.polymer_version}"
+    modRuntimeOnly "eu.pb4:polymer-autohost:${project.polymer_version}"
 
     // Resolve the server-side runtime mods directly from their Maven repositories for
     // the disposable smoke-test container. Keep this separate from Minecraft/Loader.
     smokeTestMods "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
     smokeTestMods "eu.pb4:polymer-core:${project.polymer_version}"
+    smokeTestMods "eu.pb4:polymer-resource-pack:${project.polymer_version}"
+    smokeTestMods "eu.pb4:polymer-autohost:${project.polymer_version}"
 }
 
 tasks.register('stageSmokeTestMods', Sync) {
@@ -48,7 +53,13 @@ tasks.register('verifyBeamGeometry', JavaExec) {
     mainClass = 'dev.kessoku.homelander.BeamGeometryCheck'
 }
 sourceSets.test.compileClasspath += sourceSets.main.compileClasspath
-tasks.named('test') { exclude '**/BeamGeometryCheck.class' }
+tasks.named('test') { exclude '**/BeamGeometryCheck.class', '**/HeatTimerCheck.class' }
+tasks.register('verifyHeatTimer', JavaExec) {
+    dependsOn tasks.named('testClasses')
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.kessoku.homelander.HeatTimerCheck'
+}
+tasks.named('check') { dependsOn tasks.named('verifyHeatTimer') }
 tasks.named('check') { dependsOn tasks.named('verifyBeamGeometry') }
 
 processResources {
