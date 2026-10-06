@@ -14,7 +14,7 @@ public final class BeamGeometryCheck {
             new Vec3d(1, 2, -3).normalize()
         };
         for (Vec3d direction : directions) {
-            for (double length : new double[]{0.01, 3.5, 48}) {
+            for (double length : new double[]{0.01, 3.5, 48, 256}) {
                 Vec3d delta = direction.multiply(length);
                 for (float width : new float[]{0.025f, 0.10f}) {
                     for (float angle : new float[]{0, 0.4f, 1.57f, 3.14f, 5.7f}) {
@@ -30,7 +30,7 @@ public final class BeamGeometryCheck {
         var zero = LaserGeometry.frame(start, start, 0.16f).getMatrix();
         check(zero.transformPosition(new Vector3f(0.5f, 0.5f, 0)), Vec3d.ZERO);
         check(zero.transformPosition(new Vector3f(0.5f, 0.5f, 1)), new Vec3d(0, 0, 0.001));
-        System.out.println("PASS: 210 rotating beam frames, vertical/reverse directions, hit endpoints and zero-length hits");
+        System.out.println("PASS: 280 rotating beam frames, vertical/reverse directions, hit endpoints and zero-length hits");
     }
 
     private static void check(Vector3f actual, Vec3d expected) {

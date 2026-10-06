@@ -19,7 +19,7 @@ import java.util.Map;
 import java.util.UUID;
 
 public final class LaserController {
-    private static final double RANGE = 48;
+    private static final double RANGE = 256;
     private static final Map<UUID, BeamPair> ACTIVE = new HashMap<>();
     private static long clock;
     private LaserController() {}
