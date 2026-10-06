@@ -1,8 +1,6 @@
 package dev.kessoku.homelander;
 
 import net.minecraft.block.AbstractFireBlock;
-import net.minecraft.block.Blocks;
-import net.minecraft.block.FireBlock;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
@@ -36,7 +34,7 @@ public final class LaserInteraction {
         for (var entity : world.getOtherEntities(player, new Box(start, stop).expand(0.2),
                 e -> e instanceof LivingEntity && e.isAlive() && !e.isSpectator())) {
             // The eye beams have a narrow physical width, not a large aim-assist box.
-            var intersection = entity.getBoundingBox().expand(0.08).raycast(start, stop);
+            var intersection = entity.getBoundingBox().expand(0.14).raycast(start, stop);
             if (intersection.isEmpty()) continue;
             double distance = start.squaredDistanceTo(intersection.get());
             if (distance < nearest) {
@@ -65,21 +63,32 @@ public final class LaserInteraction {
             return;
         }
         var block = hit.block();
-        var material = world.getBlockState(block.getBlockPos());
-        if (!((FireBlock) Blocks.FIRE).isFlammable(material)) {
-            state.heat.reset();
-            return;
-        }
         int threshold = 3; // 0.15 seconds of continuous aim.
-        BlockPos firePos = block.getBlockPos().offset(block.getSide());
-        var fire = AbstractFireBlock.getState(world, firePos);
-        if (!world.getBlockState(firePos).isAir() || !fire.canPlaceAt(world, firePos)
-                || !world.canPlayerModifyAt(player, firePos)) {
+        BlockPos firePos = findFirePosition(player, block);
+        if (firePos == null) {
             state.heat.reset();
             return;
         }
+        var fire = AbstractFireBlock.getState(world, firePos);
         if (state.heat.tick(new HeatedFace(block.getBlockPos(), block.getSide()), threshold, now, 4)) {
             world.setBlockState(firePos, fire, 3);
         }
+    }
+
+    private static BlockPos findFirePosition(ServerPlayerEntity player, BlockHitResult hit) {
+        var world = player.getServerWorld();
+        // For a nonflammable wall the hit face may not support ordinary fire.
+        // Prefer the face, then the top and other adjacent supported air spaces.
+        Direction[] sides = {hit.getSide(), Direction.UP, Direction.NORTH, Direction.SOUTH,
+                Direction.WEST, Direction.EAST, Direction.DOWN};
+        if (!world.canPlayerModifyAt(player, hit.getBlockPos())) return null;
+        for (var side : sides) {
+            var pos = hit.getBlockPos().offset(side);
+            if (!world.getWorldBorder().contains(pos) || world.isOutOfHeightLimit(pos)) continue;
+            var fire = AbstractFireBlock.getState(world, pos);
+            if (world.getBlockState(pos).isAir() && fire.canPlaceAt(world, pos)
+                    && world.canPlayerModifyAt(player, pos)) return pos;
+        }
+        return null;
     }
 }

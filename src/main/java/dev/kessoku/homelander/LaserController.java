@@ -21,14 +21,14 @@ import java.util.UUID;
 public final class LaserController {
     private static final double RANGE = 48;
     private static final Map<UUID, BeamPair> ACTIVE = new HashMap<>();
-    private static final Map<UUID, LaserBurst> BURSTS = new HashMap<>();
     private static long clock;
     private LaserController() {}
 
-    public static void advanceClock() {
-        clock++;
-        if (clock % 20 == 0) BURSTS.entrySet().removeIf(entry ->
-                !ACTIVE.containsKey(entry.getKey()) && entry.getValue().cooldown(clock) == 0);
+    public static void advanceClock() { clock++; }
+
+    private static boolean holding(ServerPlayerEntity player) {
+        return player.isAlive() && player.hasStatusEffect(HomelanderMod.COMPOUND_V)
+                && player.isUsingItem() && player.getActiveItem().isOf(HomelanderMod.CONTROLLER);
     }
 
     // Vanilla display entities render on ordinary clients. This approximates a
@@ -91,6 +91,7 @@ public final class LaserController {
         final Beam[] beams = new Beam[4];
         final ServerPlayerEntity owner;
         boolean mountSynced;
+        final long createdAt = clock;
         final LaserInteraction.State interaction;
 
         BeamPair(ServerPlayerEntity player) {
@@ -102,8 +103,8 @@ public final class LaserController {
             this.owner = player;
             this.interaction = interaction;
             for (int eye = 0; eye < 2; eye++) {
-                beams[eye * 2] = new Beam(world, Blocks.RED_STAINED_GLASS.getDefaultState(), 0.16f);
-                beams[eye * 2 + 1] = new Beam(world, Blocks.WHITE_CONCRETE.getDefaultState(), 0.035f);
+                beams[eye * 2] = new Beam(world, Blocks.RED_STAINED_GLASS.getDefaultState(), 0.10f);
+                beams[eye * 2 + 1] = new Beam(world, Blocks.WHITE_CONCRETE.getDefaultState(), 0.025f);
                 beams[eye * 2].setPosition(player.getEyePos());
                 beams[eye * 2 + 1].setPosition(player.getEyePos());
             }
@@ -134,35 +135,22 @@ public final class LaserController {
         }
     }
 
-    public static void toggle(ServerPlayerEntity player) {
-        if (ACTIVE.containsKey(player.getUuid())) {
-            clear(player);
-            player.sendMessage(Text.literal("Лазеры выключены. Перезарядка: 20 с"), true);
-            return;
-        }
-        LaserBurst burst = BURSTS.computeIfAbsent(player.getUuid(), id -> new LaserBurst());
-        if (!burst.start(clock)) {
-            player.sendMessage(Text.literal("Лазеры перезаряжаются: " + ((burst.cooldown(clock) + 19) / 20) + " с"), true);
-            return;
-        }
+    private static void start(ServerPlayerEntity player) {
+        if (ACTIVE.containsKey(player.getUuid())) return;
         BeamPair pair = new BeamPair(player);
         update(player, pair);
         pair.spawn();
         ACTIVE.put(player.getUuid(), pair);
-        player.sendMessage(Text.literal("Лазеры включены: 7 с"), true);
     }
 
     public static void clear(ServerPlayerEntity player) {
         BeamPair pair = ACTIVE.remove(player.getUuid());
         if (pair != null) pair.remove();
-        LaserBurst burst = BURSTS.get(player.getUuid());
-        if (burst != null) burst.stop(clock);
     }
 
     public static void clearAll() {
         for (BeamPair pair : ACTIVE.values()) pair.remove();
         ACTIVE.clear();
-        BURSTS.clear();
         clock = 0;
     }
 
@@ -174,9 +162,10 @@ public final class LaserController {
         Vec3d right = new Vec3d(Math.cos(yaw), 0, Math.sin(yaw));
         Vec3d eye = player.getEyePos();
         for (int index = 0; index < 2; index++) {
-            Vec3d start = eye.add(right.multiply(index == 0 ? -0.13 : 0.13)).add(forward.multiply(0.03));
-            Vec3d target = start.add(forward.multiply(RANGE));
-            Vec3d end = LaserInteraction.trace(player, start, target).end();
+            Vec3d source = eye.add(right.multiply(index == 0 ? -0.13 : 0.13));
+            // Trace from the eye first: a nearby wall still blocks both visuals and damage.
+            Vec3d end = LaserInteraction.trace(player, source, source.add(forward.multiply(RANGE))).end();
+            Vec3d start = source.add(forward.multiply(Math.min(0.75, source.distanceTo(end))));
             pair.beams[index * 2].update(start, end);
             pair.beams[index * 2 + 1].update(start, end);
         }
@@ -185,20 +174,13 @@ public final class LaserController {
     public static void onViewChanged(ServerPlayerEntity player) {
         BeamPair pair = ACTIVE.get(player.getUuid());
         if (pair == null) return;
-        if (!player.isAlive() || !player.hasStatusEffect(HomelanderMod.COMPOUND_V)
-                || pair.world != player.getServerWorld()) {
+        if (!holding(player) || pair.world != player.getServerWorld()) {
             clear(player);
             return;
         }
         if (java.util.Arrays.stream(pair.beams).anyMatch(beam -> beam.isRemoved() || beam.getVehicle() != player)) {
-            // Unexpected dismount must terminate the burst rather than bypass its timer.
+            // Remove a broken attachment; the next held tick can recreate it.
             clear(player);
-            return;
-        }
-        LaserBurst burst = BURSTS.get(player.getUuid());
-        if (burst == null || burst.expire(clock)) {
-            clear(player);
-            player.sendMessage(Text.literal("Лазеры остывают: 20 с"), true);
             return;
         }
         update(player, pair);
@@ -206,20 +188,31 @@ public final class LaserController {
     }
 
     public static void tick(ServerPlayerEntity player) {
+        // Clear invalid/old-world visuals before charging this tick.
         onViewChanged(player);
+        var store = LaserEnergyStore.get(player);
+        var energy = store.energy(player.getUuid());
+        int before = energy.units();
+        boolean held = holding(player);
+        boolean firing = energy.tick(held);
+        if (before != energy.units()) store.markDirty();
+        if (!firing) clear(player);
+        else start(player);
+        if (clock % 5 == 0 && (held || player.getMainHandStack().isOf(HomelanderMod.CONTROLLER)
+                || player.getOffHandStack().isOf(HomelanderMod.CONTROLLER))) {
+            player.sendMessage(Text.literal("Энергия лазеров: " + energy.percent() + "%"
+                    + (held && !firing ? " — отпусти ПКМ для восстановления" : "")), true);
+        }
         BeamPair pair = ACTIVE.get(player.getUuid());
         if (pair == null) return;
-        // END_SERVER_TICK follows normal entity tracking. The owner also needs
-        // the mount packet, and it must arrive after all four display spawn packets.
-        if (!pair.mountSynced) {
+        onViewChanged(player);
+        // Newly started beams spawn at END_SERVER_TICK. Wait one world tick
+        // for normal tracking before explicitly syncing the owner mount packet.
+        if (!pair.mountSynced && clock > pair.createdAt) {
             pair.syncMount();
             pair.mountSynced = true;
         }
-        if (clock % 20 == 0) {
-            var burst = BURSTS.get(player.getUuid());
-            player.sendMessage(Text.literal("Лазеры: " + ((burst.remaining(clock) + 19) / 20) + " с"), true);
-        }
-        Vec3d start = player.getEyePos().add(player.getRotationVec(1).multiply(0.03));
+        Vec3d start = player.getEyePos();
         var hit = LaserInteraction.trace(player, start, start.add(player.getRotationVec(1).multiply(RANGE)));
         LaserInteraction.tick(player, pair.interaction, hit);
     }

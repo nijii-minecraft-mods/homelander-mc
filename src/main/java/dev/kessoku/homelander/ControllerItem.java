@@ -2,6 +2,11 @@ package dev.kessoku.homelander;
 
 import eu.pb4.polymer.core.api.item.PolymerItem;
 import net.minecraft.item.Item;
+import net.minecraft.entity.LivingEntity;
+import net.minecraft.util.UseAction;
+import net.minecraft.util.Identifier;
+import eu.pb4.polymer.resourcepack.api.PolymerModelData;
+import eu.pb4.polymer.resourcepack.api.PolymerResourcePackUtils;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.item.tooltip.TooltipType;
@@ -18,6 +23,17 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public final class ControllerItem extends Item implements PolymerItem {
     private static final Set<UUID> PENDING_GIVE = ConcurrentHashMap.newKeySet();
+    // Shield starts/stops use on an ordinary client without ammunition or zoom.
+    // The server action is NONE: this controller does not mechanically block damage.
+    private final PolymerModelData model = PolymerResourcePackUtils.requestModel(
+            Items.SHIELD, Identifier.of("homelander", "item/controller"));
+    @Override public int getPolymerCustomModelData(ItemStack stack, ServerPlayerEntity player) { return model.value(); }
+    @Override public UseAction getUseAction(ItemStack stack) { return UseAction.NONE; }
+    @Override public int getMaxUseTime(ItemStack stack, LivingEntity user) { return 72000; }
+    @Override public void onStoppedUsing(ItemStack stack, World world, LivingEntity user, int remaining) {
+        if (user instanceof ServerPlayerEntity player) LaserController.clear(player);
+    }
+
     public ControllerItem(Settings settings) { super(settings); }
 
     @Override
@@ -27,8 +43,8 @@ public final class ControllerItem extends Item implements PolymerItem {
 
     @Override
     public void appendTooltip(ItemStack stack, TooltipContext context, List<Text> tooltip, TooltipType type) {
-        tooltip.add(Text.literal("ПКМ: лазеры. Shift + ПКМ: полёт."));
-        tooltip.add(Text.literal("Лазеры: 7 с работы, 20 с перезарядки."));
+        tooltip.add(Text.literal("Удерживай ПКМ: лазеры. Shift + ПКМ: полёт."));
+        tooltip.add(Text.literal("Энергия: 7 с луча, восстановление за 20 с."));
         tooltip.add(Text.literal("Shift во время парения: зависнуть."));
         tooltip.add(Text.literal("ЛКМ во время парения: ускорение."));
     }
@@ -44,7 +60,8 @@ public final class ControllerItem extends Item implements PolymerItem {
                 player.sendMessage(Text.literal(mode == FlightController.Mode.HOVER
                         ? "Полёт: зависание" : "Полёт: парение"), true);
             } else {
-                LaserController.toggle(player);
+                player.setCurrentHand(hand);
+                return TypedActionResult.consume(stack);
             }
         }
         return TypedActionResult.success(stack);
@@ -81,6 +98,6 @@ public final class ControllerItem extends Item implements PolymerItem {
 
     @Override
     public Item getPolymerItem(ItemStack itemStack, ServerPlayerEntity player) {
-        return Items.NETHER_STAR;
+        return Items.SHIELD;
     }
 }

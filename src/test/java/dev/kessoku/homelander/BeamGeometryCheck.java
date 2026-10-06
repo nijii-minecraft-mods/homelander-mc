@@ -16,7 +16,7 @@ public final class BeamGeometryCheck {
         for (Vec3d direction : directions) {
             for (double length : new double[]{0.01, 3.5, 48}) {
                 Vec3d delta = direction.multiply(length);
-                for (float width : new float[]{0.035f, 0.16f}) {
+                for (float width : new float[]{0.025f, 0.10f}) {
                     for (float angle : new float[]{0, 0.4f, 1.57f, 3.14f, 5.7f}) {
                     var matrix = LaserGeometry.frame(start, start.add(delta), width, angle).getMatrix();
                     Vector3f near = matrix.transformPosition(new Vector3f(0.5f, 0.5f, 0));

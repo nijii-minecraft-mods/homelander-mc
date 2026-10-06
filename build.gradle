@@ -53,7 +53,7 @@ tasks.register('verifyBeamGeometry', JavaExec) {
     mainClass = 'dev.kessoku.homelander.BeamGeometryCheck'
 }
 sourceSets.test.compileClasspath += sourceSets.main.compileClasspath
-tasks.named('test') { exclude '**/BeamGeometryCheck.class', '**/HeatTimerCheck.class', '**/LaserBurstCheck.class' }
+tasks.named('test') { exclude '**/BeamGeometryCheck.class', '**/HeatTimerCheck.class', '**/LaserEnergyCheck.class' }
 tasks.register('verifyHeatTimer', JavaExec) {
     dependsOn tasks.named('testClasses')
     classpath = sourceSets.test.runtimeClasspath
@@ -74,9 +74,9 @@ java {
     targetCompatibility = JavaVersion.VERSION_21
 }
 
- tasks.register('verifyLaserBurst', JavaExec) {
+ tasks.register('verifyLaserEnergy', JavaExec) {
     dependsOn tasks.named('testClasses')
-    classpath = sourceSets.test.runtimeClasspath
-    mainClass = 'dev.kessoku.homelander.LaserBurstCheck'
+    classpath = sourceSets.main.runtimeClasspath + sourceSets.test.output
+    mainClass = 'dev.kessoku.homelander.LaserEnergyCheck'
 }
-tasks.named('check') { dependsOn tasks.named('verifyLaserBurst') }
+tasks.named('check') { dependsOn tasks.named('verifyLaserEnergy') }
