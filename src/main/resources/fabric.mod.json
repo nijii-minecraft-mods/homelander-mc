@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "id": "homelander",
+  "version": "${version}",
+  "name": "Homelander Powers",
+  "description": "Сыворотка: полёт, усиленное здоровье и визуальные лазеры.",
+  "authors": ["Kessoku Band"],
+  "license": "MIT",
+  "environment": "*",
+  "entrypoints": { "main": ["dev.kessoku.homelander.HomelanderMod"] },
+  "depends": {
+    "fabricloader": ">=0.16.0",
+    "minecraft": "1.21.1",
+    "java": ">=21",
+    "fabric-api": "*",
+    "polymer-core": "*"
+  }
+}

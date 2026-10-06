@@ -1,0 +1,11 @@
+.git
+.gradle
+.idea
+build
+release-assets
+src
+scripts
+.github
+gradle
+README.md
+*.zip
