@@ -44,7 +44,7 @@ jobs:
       - name: Build mod
         env:
           MOD_VERSION: ${{ steps.version.outputs.version }}
-        run: bash ./gradlew --no-daemon build "-Pmod_version=$MOD_VERSION"
+        run: bash ./gradlew --no-daemon test build "-Pmod_version=$MOD_VERSION"
 
       - name: Prepare stable release assets
         run: python3 scripts/prepare_release.py

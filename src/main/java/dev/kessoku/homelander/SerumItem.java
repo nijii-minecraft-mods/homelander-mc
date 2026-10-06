@@ -1,13 +1,12 @@
 package dev.kessoku.homelander;
 
 import eu.pb4.polymer.core.api.item.PolymerItem;
-import xyz.nucleoid.packettweaker.PacketContext;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
-import net.minecraft.item.UseAction;
+import net.minecraft.util.UseAction;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.util.Hand;
 import net.minecraft.util.TypedActionResult;
@@ -17,7 +16,7 @@ public final class SerumItem extends Item implements PolymerItem {
     public SerumItem(Settings settings) { super(settings); }
 
     @Override public UseAction getUseAction(ItemStack stack) { return UseAction.DRINK; }
-    @Override public int getMaxUseTime(ItemStack stack) { return 32; }
+    @Override public int getMaxUseTime(ItemStack stack, LivingEntity user) { return 32; }
 
     @Override
     public TypedActionResult<ItemStack> use(World world, PlayerEntity user, Hand hand) {
@@ -44,7 +43,7 @@ public final class SerumItem extends Item implements PolymerItem {
     }
 
     @Override
-    public Item getPolymerItem(ItemStack itemStack, PacketContext context) {
+    public Item getPolymerItem(ItemStack itemStack, ServerPlayerEntity player) {
         return Items.POTION;
     }
 }

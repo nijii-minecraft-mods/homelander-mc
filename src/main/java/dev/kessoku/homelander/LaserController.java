@@ -7,6 +7,7 @@ import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.RaycastContext;
+import org.joml.Vector3f;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -14,7 +15,8 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class LaserController {
     private static final double RANGE = 48.0;
     private static final double STEP = 0.65;
-    private static final DustParticleEffect RED_LASER = new DustParticleEffect(0xF21B24, 1.15f);
+    private static final DustParticleEffect RED_LASER = new DustParticleEffect(
+            new Vector3f(0xF2 / 255.0f, 0x1B / 255.0f, 0x24 / 255.0f), 1.15f);
     private static final Set<UUID> ACTIVE = ConcurrentHashMap.newKeySet();
     private LaserController() {}
 

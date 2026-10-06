@@ -7,7 +7,7 @@ import net.minecraft.entity.effect.StatusEffect;
 import net.minecraft.entity.effect.StatusEffectCategory;
 import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.util.Identifier;
-import xyz.nucleoid.packettweaker.PacketContext;
+import net.minecraft.server.network.ServerPlayerEntity;
 
 public final class CompoundStatusEffect extends StatusEffect implements PolymerStatusEffect {
     public CompoundStatusEffect() {
@@ -18,7 +18,7 @@ public final class CompoundStatusEffect extends StatusEffect implements PolymerS
     }
 
     @Override
-    public StatusEffect getPolymerReplacement(PacketContext context) {
+    public StatusEffect getPolymerReplacement(ServerPlayerEntity player) {
         return StatusEffects.HEALTH_BOOST.value();
     }
 }

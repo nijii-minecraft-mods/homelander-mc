@@ -1,7 +1,6 @@
 package dev.kessoku.homelander;
 
 import eu.pb4.polymer.core.api.item.PolymerItem;
-import xyz.nucleoid.packettweaker.PacketContext;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
@@ -67,7 +66,7 @@ public final class ControllerItem extends Item implements PolymerItem {
     }
 
     @Override
-    public Item getPolymerItem(ItemStack itemStack, PacketContext context) {
+    public Item getPolymerItem(ItemStack itemStack, ServerPlayerEntity player) {
         return Items.SPYGLASS;
     }
 }
