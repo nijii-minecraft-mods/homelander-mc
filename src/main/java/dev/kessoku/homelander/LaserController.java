@@ -185,6 +185,10 @@ public final class LaserController {
         }
         update(player, pair);
         for (var beam : pair.beams) beam.sendNow();
+        // Buffer this look direction for sub-tick sweep interpolation.
+        // The tick() method will consume all buffered directions to produce
+        // a continuous fire trail even across network packet gaps.
+        pair.interaction.recordLookDirection(player.getRotationVec(1));
     }
 
     public static void tick(ServerPlayerEntity player) {
